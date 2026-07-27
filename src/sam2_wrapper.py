@@ -29,6 +29,7 @@ class Sam2Session:
         )
         self.points: list[tuple[int, int]] = []
         self.labels: list[int] = []
+        self.has_prompt = False
 
     def add_point(self, x: int, y: int, positive: bool) -> np.ndarray:
         """Add a click on frame 0 and return the current mask (H, W) bool."""
@@ -43,17 +44,36 @@ class Sam2Session:
                 points=np.array(self.points, dtype=np.float32),
                 labels=np.array(self.labels, dtype=np.int32),
             )
+        self.has_prompt = True
+        return (mask_logits[0, 0] > 0.0).cpu().numpy()
+
+    def add_mask(self, brush_mask: np.ndarray) -> np.ndarray:
+        """Use a painted (brush) mask as the selection prompt on frame 0.
+
+        Replaces any previous click points; SAM2 snaps the rough brush area
+        onto the underlying object and returns the refined mask.
+        """
+        self.clear_points()
+        with torch.inference_mode(), torch.autocast(self.device, dtype=torch.bfloat16):
+            _, _, mask_logits = self.predictor.add_new_mask(
+                inference_state=self.state,
+                frame_idx=0,
+                obj_id=OBJ_ID,
+                mask=brush_mask.astype(bool),
+            )
+        self.has_prompt = True
         return (mask_logits[0, 0] > 0.0).cpu().numpy()
 
     def clear_points(self) -> None:
         self.points.clear()
         self.labels.clear()
+        self.has_prompt = False
         self.predictor.reset_state(self.state)
 
     def propagate_and_save_masks(self, masks_dir: Path) -> int:
         """Propagate the selection through the video, writing one PNG mask per frame."""
-        if not self.points:
-            raise ValueError("Once objeye en az bir kez tiklamalisin.")
+        if not self.has_prompt:
+            raise ValueError("Once objeyi tiklayarak veya fircayla secmelisin.")
 
         masks_dir.mkdir(parents=True, exist_ok=True)
         count = 0

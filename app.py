@@ -10,7 +10,9 @@ import sys
 import uuid
 from pathlib import Path
 
+import cv2
 import gradio as gr
+import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -27,7 +29,7 @@ SESSIONS_DIR = Path(os.environ.get("LOCALAPPDATA", PROJECT_ROOT)) / "ai-rubber" 
 def on_video_upload(video_path: str | None, session: dict | None):
     _cleanup_session(session)
     if not video_path:
-        return None, None, gr.update(interactive=False)
+        return None, None, None, gr.update(value="")
 
     session_dir = SESSIONS_DIR / uuid.uuid4().hex[:8]
     frames_dir = session_dir / "frames"
@@ -42,8 +44,9 @@ def on_video_upload(video_path: str | None, session: dict | None):
         "source": video_path,
         "first_frame": first_frame,
     }
-    msg = f"{info.frame_count} kare @ {info.fps:.0f} fps ({info.width}x{info.height}). Simdi objeye tikla."
-    return new_session, first_frame, gr.update(interactive=True, value=msg)
+    editor_value = {"background": first_frame, "layers": [], "composite": None}
+    msg = f"{info.frame_count} kare @ {info.fps:.0f} fps ({info.width}x{info.height}). Objeye tikla veya fircayla boya."
+    return new_session, first_frame, editor_value, gr.update(value=msg)
 
 
 def on_image_click(session: dict | None, point_mode: str, evt: gr.SelectData):
@@ -55,11 +58,37 @@ def on_image_click(session: dict | None, point_mode: str, evt: gr.SelectData):
     return overlay_mask(session["first_frame"], mask)
 
 
+def on_brush_apply(session: dict | None, editor_value: dict | None):
+    if not session or session.get("sam2") is None:
+        raise gr.Error("Once bir video yukle.")
+    brush_mask = _brush_mask_from_editor(editor_value, session["first_frame"].shape[:2])
+    if brush_mask is None or not brush_mask.any():
+        raise gr.Error("Once fircayla objenin uzerini boya.")
+    mask = session["sam2"].add_mask(brush_mask)
+    return overlay_mask(session["first_frame"], mask)
+
+
+def _brush_mask_from_editor(editor_value: dict | None, shape: tuple[int, int]) -> np.ndarray | None:
+    """Collect painted pixels (alpha > 0) from all editor layers."""
+    if not editor_value or not editor_value.get("layers"):
+        return None
+    mask = np.zeros(shape, dtype=bool)
+    for layer in editor_value["layers"]:
+        if layer is None:
+            continue
+        alpha = layer[..., 3] if layer.ndim == 3 and layer.shape[2] == 4 else layer.max(axis=2)
+        if alpha.shape != shape:
+            alpha = cv2.resize(alpha, (shape[1], shape[0]), interpolation=cv2.INTER_NEAREST)
+        mask |= alpha > 0
+    return mask
+
+
 def on_clear_points(session: dict | None):
     if not session or session.get("sam2") is None:
-        return None
+        return None, None
     session["sam2"].clear_points()
-    return session["first_frame"]
+    editor_value = {"background": session["first_frame"], "layers": [], "composite": None}
+    return session["first_frame"], editor_value
 
 
 def on_remove_object(session: dict | None, progress=gr.Progress()):
@@ -111,18 +140,35 @@ def build_ui() -> gr.Blocks:
                 point_mode = gr.Radio(
                     ["Ekle (obje)", "Cikar (arka plan)"],
                     value="Ekle (obje)",
-                    label="Tiklama modu",
+                    label="Tiklama modu (Tikla sekmesi icin)",
                 )
                 with gr.Row():
                     clear_btn = gr.Button("Secimi Temizle")
                     remove_btn = gr.Button("🧽 Objeyi Sil", variant="primary")
             with gr.Column():
-                frame_view = gr.Image(label="Ilk kare — objeye tikla", interactive=False)
+                with gr.Tab("🖱️ Tikla"):
+                    frame_view = gr.Image(
+                        label="Objeye tikla — kirmizi maske cikar", interactive=False
+                    )
+                with gr.Tab("🖌️ Firca"):
+                    brush_editor = gr.ImageEditor(
+                        label="Objenin uzerini boya, sonra 'Fircayi Uygula'",
+                        type="numpy",
+                        sources=(),
+                        transforms=(),
+                        brush=gr.Brush(colors=["#ff0000"], default_size=25),
+                        layers=False,
+                    )
+                    brush_btn = gr.Button("🖌️ Fircayi Uygula", variant="secondary")
+                    brush_preview = gr.Image(label="Firca secim onizlemesi", interactive=False)
                 video_out = gr.Video(label="Sonuc")
 
-        video_in.change(on_video_upload, [video_in, session], [session, frame_view, status])
+        video_in.change(
+            on_video_upload, [video_in, session], [session, frame_view, brush_editor, status]
+        )
         frame_view.select(on_image_click, [session, point_mode], [frame_view])
-        clear_btn.click(on_clear_points, [session], [frame_view])
+        brush_btn.click(on_brush_apply, [session, brush_editor], [brush_preview])
+        clear_btn.click(on_clear_points, [session], [frame_view, brush_editor])
         remove_btn.click(on_remove_object, [session], [video_out, status])
     return demo
 
