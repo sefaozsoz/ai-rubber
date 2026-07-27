@@ -160,15 +160,17 @@ def build_ui() -> gr.Blocks:
                         label="Objeye tikla — kirmizi maske cikar", interactive=False
                     )
                 with gr.Tab("🖌️ Firca"):
+                    brush_btn = gr.Button(
+                        "🖌️🧽 BOYADIGIM OBJEYI SIL", variant="primary", size="lg"
+                    )
                     brush_editor = gr.ImageEditor(
-                        label="Objenin uzerini kabaca boya",
+                        label="1) Asagida objenin uzerini boya  2) Ustteki butona bas",
                         type="numpy",
                         sources=(),
                         transforms=(),
                         brush=gr.Brush(colors=["#ff0000"], default_size=25),
                         layers=False,
                     )
-                    brush_btn = gr.Button("🖌️🧽 Boyadigim Objeyi Sil", variant="primary")
                     brush_preview = gr.Image(label="Algilanan obje", interactive=False)
                 video_out = gr.Video(label="Sonuc")
 
