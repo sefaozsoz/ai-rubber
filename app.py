@@ -4,6 +4,7 @@ Akis: video yukle -> ilk karede objeye tikla (SAM2 maskeler) ->
 "Objeyi Sil" -> SAM2 maskeyi tum videoya yayar -> ProPainter objeyi siler.
 """
 
+import os
 import shutil
 import sys
 import uuid
@@ -18,7 +19,9 @@ from src.pipeline import run_propainter
 from src.sam2_wrapper import Sam2Session, overlay_mask
 from src.video_utils import extract_frames, read_first_frame_rgb, remux_with_audio
 
-SESSIONS_DIR = PROJECT_ROOT / "outputs" / "sessions"
+# ASCII-safe konum: OneDrive/"Masaüstü" altindaki yollar OpenCV ve ucuncu parti
+# kodda sorun cikariyor, oturum dosyalari AppData'da tutulur.
+SESSIONS_DIR = Path(os.environ.get("LOCALAPPDATA", PROJECT_ROOT)) / "ai-rubber" / "sessions"
 
 
 def on_video_upload(video_path: str | None, session: dict | None):

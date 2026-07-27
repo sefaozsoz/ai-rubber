@@ -5,8 +5,27 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 MAX_PROCESS_WIDTH = 960  # keep VRAM usage sane on 6 GB GPUs
+
+
+def write_image(path: Path, image: np.ndarray, quality: int | None = None) -> None:
+    """Unicode-safe imwrite: cv2.imwrite fails silently on non-ASCII Windows paths."""
+    params = [cv2.IMWRITE_JPEG_QUALITY, quality] if quality else []
+    ok, buffer = cv2.imencode(path.suffix, image, params)
+    if not ok:
+        raise IOError(f"Kare kodlanamadi: {path}")
+    path.write_bytes(buffer.tobytes())
+
+
+def read_image(path: Path) -> np.ndarray:
+    """Unicode-safe imread."""
+    data = np.fromfile(str(path), dtype=np.uint8)
+    image = cv2.imdecode(data, cv2.IMREAD_COLOR)
+    if image is None:
+        raise IOError(f"Kare okunamadi: {path}")
+    return image
 
 
 @dataclass(frozen=True)
@@ -42,7 +61,7 @@ def extract_frames(video_path: str | Path, frames_dir: str | Path) -> VideoInfo:
             break
         if scale < 1.0:
             frame = cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA)
-        cv2.imwrite(str(frames_dir / f"{count:05d}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        write_image(frames_dir / f"{count:05d}.jpg", frame, quality=95)
         count += 1
     cap.release()
 
@@ -53,7 +72,7 @@ def extract_frames(video_path: str | Path, frames_dir: str | Path) -> VideoInfo:
 
 def read_first_frame_rgb(info: VideoInfo):
     """Return the first extracted frame as an RGB numpy array."""
-    frame = cv2.imread(str(info.frames_dir / "00000.jpg"))
+    frame = read_image(info.frames_dir / "00000.jpg")
     return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 

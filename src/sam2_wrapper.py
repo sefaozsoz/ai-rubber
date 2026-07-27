@@ -2,9 +2,10 @@
 
 from pathlib import Path
 
-import cv2
 import numpy as np
 import torch
+
+from src.video_utils import write_image
 
 SAM2_CHECKPOINT = Path(__file__).resolve().parent.parent / "weights" / "sam2.1_hiera_small.pt"
 SAM2_CONFIG = "configs/sam2.1/sam2.1_hiera_s.yaml"
@@ -59,7 +60,7 @@ class Sam2Session:
         with torch.inference_mode(), torch.autocast(self.device, dtype=torch.bfloat16):
             for frame_idx, _, mask_logits in self.predictor.propagate_in_video(self.state):
                 mask = (mask_logits[0, 0] > 0.0).cpu().numpy().astype(np.uint8) * 255
-                cv2.imwrite(str(masks_dir / f"{frame_idx:05d}.png"), mask)
+                write_image(masks_dir / f"{frame_idx:05d}.png", mask)
                 count += 1
         return count
 
