@@ -45,7 +45,10 @@ def on_video_upload(video_path: str | None, session: dict | None):
         "first_frame": first_frame,
     }
     editor_value = {"background": first_frame, "layers": [], "composite": None}
-    msg = f"{info.frame_count} kare @ {info.fps:.0f} fps ({info.width}x{info.height}). Objeye tikla veya fircayla boya."
+    msg = (
+        f"Video hazir ({info.frame_count} kare, {info.width}x{info.height}). "
+        "ADIM 2: Asagidaki boyama alaninda objenin uzerini fircayla karala!"
+    )
     return new_session, first_frame, editor_value, gr.update(value=msg)
 
 
@@ -139,40 +142,41 @@ def _cleanup_session(session: dict | None) -> None:
 
 def build_ui() -> gr.Blocks:
     with gr.Blocks(title="AI Rubber — Videodan Obje Sil") as demo:
-        gr.Markdown("# 🧽 AI Rubber\nVideo yukle → objeye tikla → **Objeyi Sil**. Tamamen lokal ve ucretsiz (SAM2 + ProPainter).")
+        gr.Markdown(
+            "# 🧽 AI Rubber\n"
+            "**ADIM 1:** Video yukle → **ADIM 2:** Asagidaki BUYUK RESIMDE objenin uzerini "
+            "fircayla boya (video oynaticiya DEGIL!) → **ADIM 3:** Sil butonuna bas."
+        )
         session = gr.State(None)
 
         with gr.Row():
-            with gr.Column():
-                video_in = gr.Video(label="Video yukle", sources=["upload"])
-                status = gr.Textbox(label="Durum", interactive=False)
-                point_mode = gr.Radio(
-                    ["Ekle (obje)", "Cikar (arka plan)"],
-                    value="Ekle (obje)",
-                    label="Tiklama modu (Tikla sekmesi icin)",
-                )
-                with gr.Row():
-                    clear_btn = gr.Button("Secimi Temizle")
-                    remove_btn = gr.Button("🧽 Objeyi Sil", variant="primary")
-            with gr.Column():
-                with gr.Tab("🖱️ Tikla"):
-                    frame_view = gr.Image(
-                        label="Objeye tikla — kirmizi maske cikar", interactive=False
-                    )
-                with gr.Tab("🖌️ Firca"):
-                    brush_btn = gr.Button(
-                        "🖌️🧽 BOYADIGIM OBJEYI SIL", variant="primary", size="lg"
-                    )
-                    brush_editor = gr.ImageEditor(
-                        label="1) Asagida objenin uzerini boya  2) Ustteki butona bas",
-                        type="numpy",
-                        sources=(),
-                        transforms=(),
-                        brush=gr.Brush(colors=["#ff0000"], default_size=25),
-                        layers=False,
-                    )
-                    brush_preview = gr.Image(label="Algilanan obje", interactive=False)
-                video_out = gr.Video(label="Sonuc")
+            video_in = gr.Video(label="ADIM 1: Video yukle", sources=["upload"])
+            video_out = gr.Video(label="SONUC (islem bitince burada oynar)")
+        status = gr.Textbox(label="Durum", interactive=False)
+
+        gr.Markdown("## ADIM 2: Objeyi burada boya 👇 (fircayla uzerini karala)")
+        brush_editor = gr.ImageEditor(
+            label="Boyama alani — video yuklenince ilk kare buraya gelir",
+            type="numpy",
+            sources=(),
+            transforms=(),
+            brush=gr.Brush(colors=["#ff0000"], default_size=25),
+            layers=False,
+            height=520,
+        )
+        brush_btn = gr.Button("ADIM 3: 🖌️🧽 BOYADIGIM OBJEYI SIL", variant="primary", size="lg")
+        brush_preview = gr.Image(label="Algilanan obje", interactive=False, visible=True)
+
+        with gr.Accordion("🖱️ Alternatif: fircayla ugrasma, objeye tek tik ile sec", open=False):
+            point_mode = gr.Radio(
+                ["Ekle (obje)", "Cikar (arka plan)"],
+                value="Ekle (obje)",
+                label="Tiklama modu",
+            )
+            frame_view = gr.Image(label="Objeye tikla — kirmizi maske cikar", interactive=False)
+            with gr.Row():
+                clear_btn = gr.Button("Secimi Temizle")
+                remove_btn = gr.Button("🧽 Secili Objeyi Sil", variant="primary")
 
         video_in.change(
             on_video_upload, [video_in, session], [session, frame_view, brush_editor, status]
