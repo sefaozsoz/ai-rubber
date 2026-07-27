@@ -1,5 +1,6 @@
 """Video frame extraction and writing helpers."""
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,7 +8,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-MAX_PROCESS_WIDTH = 960  # keep VRAM usage sane on 6 GB GPUs
+# 6 GB GPU'da 960 guvenli; 16 GB bulut GPU'da (Colab T4) 1280+ kullanilabilir.
+MAX_PROCESS_WIDTH = int(os.environ.get("AIRUBBER_MAX_WIDTH", "960"))
 
 
 def write_image(path: Path, image: np.ndarray, quality: int | None = None) -> None:

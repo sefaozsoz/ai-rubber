@@ -1,5 +1,6 @@
 """SAM 2 wrapper: interactive point-based selection + full-video mask propagation."""
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -7,8 +8,16 @@ import torch
 
 from src.video_utils import write_image
 
-SAM2_CHECKPOINT = Path(__file__).resolve().parent.parent / "weights" / "sam2.1_hiera_small.pt"
-SAM2_CONFIG = "configs/sam2.1/sam2.1_hiera_s.yaml"
+# AIRUBBER_SAM2_MODEL: tiny | small | base_plus | large (VRAM'e gore sec)
+_SAM2_VARIANTS = {
+    "tiny": ("sam2.1_hiera_tiny.pt", "configs/sam2.1/sam2.1_hiera_t.yaml"),
+    "small": ("sam2.1_hiera_small.pt", "configs/sam2.1/sam2.1_hiera_s.yaml"),
+    "base_plus": ("sam2.1_hiera_base_plus.pt", "configs/sam2.1/sam2.1_hiera_b+.yaml"),
+    "large": ("sam2.1_hiera_large.pt", "configs/sam2.1/sam2.1_hiera_l.yaml"),
+}
+_variant = os.environ.get("AIRUBBER_SAM2_MODEL", "small")
+_ckpt_name, SAM2_CONFIG = _SAM2_VARIANTS[_variant]
+SAM2_CHECKPOINT = Path(__file__).resolve().parent.parent / "weights" / _ckpt_name
 OBJ_ID = 1
 
 

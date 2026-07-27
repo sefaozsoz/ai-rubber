@@ -185,4 +185,6 @@ def build_ui() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    build_ui().launch(inbrowser=True)
+    # AIRUBBER_SHARE=1 -> Colab/bulut icin herkese acik gecici Gradio linki
+    share = os.environ.get("AIRUBBER_SHARE") == "1"
+    build_ui().launch(inbrowser=not share, share=share)
