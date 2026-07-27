@@ -28,6 +28,12 @@ class Sam2Session:
         from sam2.build_sam import build_sam2_video_predictor
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # T4 gibi eski GPU'lar bfloat16 desteklemez -> float16'ya dus
+        self.autocast_dtype = (
+            torch.bfloat16
+            if self.device == "cuda" and torch.cuda.is_bf16_supported()
+            else torch.float16
+        )
         self.predictor = build_sam2_video_predictor(
             SAM2_CONFIG, str(SAM2_CHECKPOINT), device=self.device
         )
@@ -45,7 +51,7 @@ class Sam2Session:
         self.points.append((x, y))
         self.labels.append(1 if positive else 0)
 
-        with torch.inference_mode(), torch.autocast(self.device, dtype=torch.bfloat16):
+        with torch.inference_mode(), torch.autocast(self.device, dtype=self.autocast_dtype):
             _, _, mask_logits = self.predictor.add_new_points_or_box(
                 inference_state=self.state,
                 frame_idx=0,
@@ -63,7 +69,7 @@ class Sam2Session:
         onto the underlying object and returns the refined mask.
         """
         self.clear_points()
-        with torch.inference_mode(), torch.autocast(self.device, dtype=torch.bfloat16):
+        with torch.inference_mode(), torch.autocast(self.device, dtype=self.autocast_dtype):
             _, _, mask_logits = self.predictor.add_new_mask(
                 inference_state=self.state,
                 frame_idx=0,
@@ -86,7 +92,7 @@ class Sam2Session:
 
         masks_dir.mkdir(parents=True, exist_ok=True)
         count = 0
-        with torch.inference_mode(), torch.autocast(self.device, dtype=torch.bfloat16):
+        with torch.inference_mode(), torch.autocast(self.device, dtype=self.autocast_dtype):
             for frame_idx, _, mask_logits in self.predictor.propagate_in_video(self.state):
                 mask = (mask_logits[0, 0] > 0.0).cpu().numpy().astype(np.uint8) * 255
                 write_image(masks_dir / f"{frame_idx:05d}.png", mask)
