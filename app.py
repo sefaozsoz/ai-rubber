@@ -58,16 +58,6 @@ def on_image_click(session: dict | None, point_mode: str, evt: gr.SelectData):
     return overlay_mask(session["first_frame"], mask)
 
 
-def on_brush_apply(session: dict | None, editor_value: dict | None):
-    if not session or session.get("sam2") is None:
-        raise gr.Error("Once bir video yukle.")
-    brush_mask = _brush_mask_from_editor(editor_value, session["first_frame"].shape[:2])
-    if brush_mask is None or not brush_mask.any():
-        raise gr.Error("Once fircayla objenin uzerini boya.")
-    mask = session["sam2"].add_mask(brush_mask)
-    return overlay_mask(session["first_frame"], mask)
-
-
 def _brush_mask_from_editor(editor_value: dict | None, shape: tuple[int, int]) -> np.ndarray | None:
     """Collect painted pixels (alpha > 0) from all editor layers."""
     if not editor_value or not editor_value.get("layers"):
@@ -91,10 +81,29 @@ def on_clear_points(session: dict | None):
     return session["first_frame"], editor_value
 
 
+def on_brush_remove(session: dict | None, editor_value: dict | None, progress=gr.Progress()):
+    """Tek adim: boyanan bolgeden objeyi algila, maskeyi yay ve videodan sil."""
+    if not session or session.get("sam2") is None:
+        raise gr.Error("Once bir video yukle.")
+    brush_mask = _brush_mask_from_editor(editor_value, session["first_frame"].shape[:2])
+    if brush_mask is None or not brush_mask.any():
+        raise gr.Error("Once fircayla objenin uzerini boya.")
+
+    progress(0.05, desc="Boyanan obje algilaniyor (SAM2)...")
+    mask = session["sam2"].add_mask(brush_mask)
+    preview = overlay_mask(session["first_frame"], mask)
+    final, msg = _run_removal(session, progress)
+    return preview, final, msg
+
+
 def on_remove_object(session: dict | None, progress=gr.Progress()):
     if not session or session.get("sam2") is None:
-        raise gr.Error("Once bir video yukleyip objeye tiklamalisin.")
+        raise gr.Error("Once bir video yukleyip objeyi secmelisin.")
+    final, msg = _run_removal(session, progress)
+    return final, msg
 
+
+def _run_removal(session: dict, progress) -> tuple[str, str]:
     session_dir: Path = session["dir"]
     masks_dir = session_dir / "masks"
     info = session["info"]
@@ -152,22 +161,24 @@ def build_ui() -> gr.Blocks:
                     )
                 with gr.Tab("🖌️ Firca"):
                     brush_editor = gr.ImageEditor(
-                        label="Objenin uzerini boya, sonra 'Fircayi Uygula'",
+                        label="Objenin uzerini kabaca boya",
                         type="numpy",
                         sources=(),
                         transforms=(),
                         brush=gr.Brush(colors=["#ff0000"], default_size=25),
                         layers=False,
                     )
-                    brush_btn = gr.Button("🖌️ Fircayi Uygula", variant="secondary")
-                    brush_preview = gr.Image(label="Firca secim onizlemesi", interactive=False)
+                    brush_btn = gr.Button("🖌️🧽 Boyadigim Objeyi Sil", variant="primary")
+                    brush_preview = gr.Image(label="Algilanan obje", interactive=False)
                 video_out = gr.Video(label="Sonuc")
 
         video_in.change(
             on_video_upload, [video_in, session], [session, frame_view, brush_editor, status]
         )
         frame_view.select(on_image_click, [session, point_mode], [frame_view])
-        brush_btn.click(on_brush_apply, [session, brush_editor], [brush_preview])
+        brush_btn.click(
+            on_brush_remove, [session, brush_editor], [brush_preview, video_out, status]
+        )
         clear_btn.click(on_clear_points, [session], [frame_view, brush_editor])
         remove_btn.click(on_remove_object, [session], [video_out, status])
     return demo
