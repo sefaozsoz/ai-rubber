@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+weights/
+outputs/
+third_party/
+*.mp4
+*.log
+graphify-out/
